@@ -155,8 +155,11 @@ class RMSprop(Optimizer):
             for k, v in w.items():
                 self.accumulators[k] = np.zeros(v.shape)
         for k in list(w.keys()):
+            #####################################################################################
+            # code here
             self.accumulators[k] = self.bata * self.accumulators[k] + (1 - self.bata) * w_grads[k]**2
-            new_w[k] = w[k] - self.lr * w_grads[k] / (np.sqrt(self.accumulators[k] + self.epsilon))
+            new_w[k] = w[k] - (self.lr * w_grads[k] / (np.sqrt(self.accumulators[k]) + self.epsilon))
+            #####################################################################################
         return new_w
 
 

@@ -7,7 +7,7 @@ CS5242 Assignments of NUS
 
 ### python package
 - wget
-- tensorflow
+- tensorflow 1.14.0 (pip install tensorflow==1.14.0)
 - keras
 - matplotlib
 - numpy
