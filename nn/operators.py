@@ -307,26 +307,24 @@ class pool(operator):
 
         pad_scheme = (pad//2, pad - pad//2)
         input_pad = np.pad(input, pad_width=((0,0), (0,0), pad_scheme, pad_scheme),mode='constant', constant_values=0)
-        hw = [(h, w) for h in recep_fields_h for w in recep_fields_w]
+        
         recep_fields_h = [stride*i for i in range(out_height)]
         recep_fields_w = [stride*i for i in range(out_width)]
-
-        recep_col = None
-        iter = range(in_channel)
-        for i in iter:
-            stacks = np.stack(map(lambda x: input_pad[:, i, x[0]:x[0] + pool_height, x[1]:x[1] + pool_width].reshape(batch, -1), hw), axis=-1)
-            if recep_col is None:
-                recep_col = stacks
-            else:
-                recep_col = np.concatenate((recep_col, stacks), axis=-1)
+        output = np.zeros((batch, in_channel, out_height, out_width, pool_height, pool_width))
         
+        for h in range(out_height):
+            for w in range(out_width):
+                recep_h_start = stride * h
+                recep_h_end = stride * h + pool_height
+                recep_w_start = stride * w
+                recep_w_end = stride * w + pool_width
+                output[:, :, h, w] += input_pad[:,
+                                                :, recep_h_start:recep_h_end, recep_w_start: recep_w_end]
+
         if pool_type == 'max':
-            input_pool = np.amax(recep_col, axis=1)
+            output = np.max(output, axis=(4,5))
         elif pool_type == 'avg':
-            input_pool = np.mean(recep_col, axis=1)   
-
-        
-        output = input_pool.reshape(batch, in_channel, out_height, out_width)
+            output = np.mean(output, axis=(4,5))
         #####################################################################################
         return output
 
@@ -523,11 +521,11 @@ class gru(operator):
         #####################################################################################
         # code here
         # reset gate
-        x_r = None
+        x_r = sigmoid(np.dot(np.nan_to_num(x), kernel_r) + np.dot(prev_h, recurrent_kernel_r))
         # update gate
-        x_z = None
+        x_z = sigmoid(np.dot(np.nan_to_num(x), kernel_z) + np.dot(prev_h, recurrent_kernel_z))
         # new gate
-        x_h = None
+        x_h = np.tanh(np.dot(np.nan_to_num(x), kernel_h) + np.dot(np.multiply(x_r, prev_h), recurrent_kernel_h))
         #####################################################################################
 
         output = (1 - x_z) * x_h + x_z * prev_h
@@ -555,16 +553,26 @@ class gru(operator):
 
         #####################################################################################
         # code here
-        x_grad = None
-        prev_h_grad = None
+        x_r = sigmoid(np.dot(np.nan_to_num(x), kernel_r) + np.dot(prev_h, recurrent_kernel_r))
+        # update gate
+        x_z = sigmoid(np.dot(np.nan_to_num(x), kernel_z) + np.dot(prev_h, recurrent_kernel_z))
+        # new gate
+        x_h = np.tanh(np.dot(np.nan_to_num(x), kernel_h) + np.dot(np.multiply(x_r, prev_h), recurrent_kernel_h))
 
-        kernel_r_grad = None
-        kernel_z_grad = None
-        kernel_h_grad = None
+        d_h = out_grad * (1 - x_z) * (1 - np.square(x_h))
+        d_z = out_grad*(prev_h - x_h) * (x_z * (1 - x_z))
+        d_r = np.dot(d_h, recurrent_kernel_h.T) * prev_h * (x_r * (1 - x_r))
 
-        recurrent_kernel_r_grad = None
-        recurrent_kernel_z_grad = None
-        recurrent_kernel_h_grad = None
+        x_grad = np.nan_to_num(np.dot(d_z, kernel_z.T) + np.dot(d_r, kernel_r.T) + np.dot(d_h, kernel_h.T))
+        prev_h_grad = np.nan_to_num(out_grad * x_z + np.dot(d_h, recurrent_kernel_h.T) * x_r + np.dot(d_z, recurrent_kernel_z.T) + np.dot(d_r, recurrent_kernel_r.T))
+
+        kernel_r_grad = np.nan_to_num(np.dot(x.T, d_r))
+        kernel_z_grad = np.nan_to_num(np.dot(x.T, d_z))
+        kernel_h_grad = np.nan_to_num(np.dot(x.T, d_h))
+
+        recurrent_kernel_r_grad = np.nan_to_num(np.dot(prev_h.T, d_r))
+        recurrent_kernel_z_grad = np.nan_to_num(np.dot(prev_h.T, d_z))
+        recurrent_kernel_h_grad = np.nan_to_num(np.dot(np.multiply(x_r, prev_h).T, d_h))
         #####################################################################################
 
         in_grad = [x_grad, prev_h_grad]
